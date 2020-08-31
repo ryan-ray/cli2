@@ -1,6 +1,7 @@
 package cli2
 
 import (
+	"flag"
 	"testing"
 )
 
@@ -14,8 +15,9 @@ type TestCmd struct {
 	args             []string
 }
 
-func (tc TestCmd) Name() string        { return name }
-func (tc TestCmd) Description() string { return description }
+func (tc TestCmd) Name() string              { return name }
+func (tc TestCmd) Description() string       { return description }
+func (tc TestCmd) Register(fs *flag.FlagSet) {}
 func (tc *TestCmd) Execute(args []string) error {
 	tc.executionSuccess = true
 	tc.args = args
