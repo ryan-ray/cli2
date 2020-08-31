@@ -2,6 +2,8 @@ package cli2
 
 import (
 	"flag"
+	"fmt"
+	"strings"
 )
 
 type Command interface {
@@ -53,9 +55,12 @@ func (a App) Run(args []string) error {
 	cursor.Command.Register(a.fs)
 	i := 0
 
+	cmdChain := []string{}
+	cmdChain = append(cmdChain, cursor.Command.Name())
 	for _, arg := range args {
 		if sc, ok := cursor.SubCommands[arg]; ok {
 			cursor = sc
+			cmdChain = append(cmdChain, cursor.Command.Name())
 			i += 1
 		} else {
 			break
@@ -67,6 +72,23 @@ func (a App) Run(args []string) error {
 		cursor.Command.Register(a.fs)
 	}
 
+	a.fs.Usage = usage(
+		strings.Join(cmdChain, " "),
+		cursor.Command.Description(),
+		a.fs,
+	)
+
 	a.fs.Parse(args[i:])
+
 	return cursor.Command.Execute(a.fs.Args())
+}
+
+func usage(name string, description string, fs *flag.FlagSet) func() {
+	// Sneak our description in there
+	return func() {
+		w := fs.Output()
+		fmt.Fprintf(w, "Usage of %s:\n\n", name)
+		fmt.Fprintf(w, "%s\n\n", description)
+		fs.PrintDefaults()
+	}
 }
