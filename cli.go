@@ -1,6 +1,7 @@
 package cli2
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"strings"
@@ -9,7 +10,7 @@ import (
 type Command interface {
 	Name() string
 	Description() string
-	Register(*flag.FlagSet)
+	DefineFlags(*flag.FlagSet)
 	Execute([]string) error
 }
 
@@ -27,6 +28,7 @@ func NewNode(c Command) *Node {
 
 func (n *Node) AddSub(name string, c Command) *Node {
 	sc := NewNode(c)
+	// TODO: Sanitize string to remove spaces
 	n.SubCommands[name] = sc
 
 	return sc
@@ -45,18 +47,31 @@ func NewApp(c Command) *App {
 	}
 }
 
-func (a App) Root() *Node {
-	return &a.Node
+func (a App) Root() (*Node, error) {
+	if a.Node.Command == nil {
+		return nil, errors.New("No root node assigned. Did you use NewApp?")
+	}
+	return &a.Node, nil
 }
 
+// Run looks through our
 func (a App) Run(args []string) error {
-	var cursor *Node = a.Root()
-	// Register our global/root level flags
-	cursor.Command.Register(a.fs)
+	// Ditch our first arg, root node is always
+	// selected by default
+	args = args[1:]
+
+	cursor, err := a.Root()
+	if err != nil {
+		return err
+	}
+
+	// DefineFlags our global/root level flags
+	cursor.Command.DefineFlags(a.fs)
 	i := 0
 
 	cmdChain := []string{}
 	cmdChain = append(cmdChain, cursor.Command.Name())
+
 	for _, arg := range args {
 		if sc, ok := cursor.SubCommands[arg]; ok {
 			cursor = sc
@@ -67,9 +82,9 @@ func (a App) Run(args []string) error {
 		}
 	}
 
-	// Register sub command flags
+	// DefineFlags sub command flags if we have a sub command.
 	if i > 0 {
-		cursor.Command.Register(a.fs)
+		cursor.Command.DefineFlags(a.fs)
 	}
 
 	a.fs.Usage = usage(

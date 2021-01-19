@@ -13,10 +13,17 @@ type Main struct {
 	verbose bool
 }
 
-func (m Main) Name() string        { return "Cli2" }
-func (m Main) Description() string { return "Description for Cli2" }
+func (m Main) Name() string { return "Cli2" }
+func (m Main) Description() string {
+	return `This is the description text for the root or main command node.
 
-func (m *Main) Register(fs *flag.FlagSet) {
+Available commands:
+
+sub	Runs the sub command
+`
+}
+
+func (m *Main) DefineFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&m.debug, "debug", false, "Set debug")
 	fs.BoolVar(&m.verbose, "v", false, "Set verbose")
 }
@@ -35,8 +42,8 @@ type Sub struct {
 func (s Sub) Name() string        { return "Sub Command" }
 func (s Sub) Description() string { return "Sub Command for Main" }
 
-func (s *Sub) Register(fs *flag.FlagSet) {
-	_ = fs.Bool("subname", true, "Set subname")
+func (s *Sub) DefineFlags(fs *flag.FlagSet) {
+	fs.StringVar(&s.filename, "subname", "", "Set subname")
 }
 
 func (s Sub) Execute(args []string) error {
@@ -48,6 +55,6 @@ func main() {
 
 	app := cli2.NewApp(&Main{})
 	app.AddSub("sub", &Sub{})
-	app.Run(os.Args[1:])
+	app.Run(os.Args)
 
 }
