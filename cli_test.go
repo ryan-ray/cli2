@@ -1,45 +1,34 @@
 package cli2
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"testing"
 )
 
-var (
-	name        = "TestCmd"
-	description = "TestDescription"
-)
-
-type TestCmd struct {
-	executionSuccess bool
-	args             []string
+type MockCmd struct {
+	vars        map[string]interface{}
+	name        func() string
+	description func() string
+	defineFlags func(*flag.FlagSet)
+	execute     func([]string) error
 }
 
-func (tc TestCmd) Name() string                 { return "TestCmd" }
-func (tc TestCmd) Description() string          { return "TestDescription" }
-func (tc TestCmd) DefineFlags(fs *flag.FlagSet) {}
-func (tc *TestCmd) Execute(args []string) error {
-	tc.executionSuccess = true
-	tc.args = args
-	return nil
-}
+func (mc MockCmd) Name() string                 { return mc.name() }
+func (mc MockCmd) Description() string          { return mc.description() }
+func (mc MockCmd) DefineFlags(fs *flag.FlagSet) { mc.defineFlags(fs) }
+func (mc MockCmd) Execute(args []string) error  { return mc.execute(args) }
 
-var errCmdReturn error = errors.New("ErrCmdRet")
-
-type ErrorCmd struct{}
-
-func (ec ErrorCmd) Name() string                 { return "ErrorCmd" }
-func (ec ErrorCmd) Description() string          { return "ErrorDescription" }
-func (ec ErrorCmd) DefineFlags(fs *flag.FlagSet) {}
-func (ec ErrorCmd) Execute(args []string) error {
-	return errCmdReturn
+var testCmd MockCmd = MockCmd{
+	vars:        make(map[string]interface{}),
+	name:        func() string { return "TestCmd" },
+	description: func() string { return "TestCmd Description" },
+	defineFlags: func(*flag.FlagSet) {},
+	execute:     func(args []string) error { return nil },
 }
 
 func TestNewApp(t *testing.T) {
-	tc := &TestCmd{false, []string{}}
-	app := NewApp(tc)
+	app := NewApp(&testCmd)
 
 	got := app.Command.Name()
 	want := "TestCmd"
@@ -61,46 +50,72 @@ func TestAppRootUnassigned(t *testing.T) {
 	}
 }
 
-func TestExecute(t *testing.T) {
-	tc := &TestCmd{false, []string{}}
-	app := NewApp(tc)
+func TestExecuteCmd(t *testing.T) {
+	testCmd.execute = func(args []string) error {
+		testCmd.vars["args"] = args
+		testCmd.vars["executed"] = true
 
-	args := []string{"one", "two", "three"}
-	app.Command.Execute(args)
-
-	if !tc.executionSuccess {
-		t.Errorf("Expected true, got false")
+		return nil
 	}
 
-	for i, v := range tc.args {
-		if v != args[i] {
-			t.Errorf("Got %s, want %s", v, args[i])
-		}
+	app := NewApp(&testCmd)
+	err := app.Run([]string{"./prog", "one", "two", "three"})
+	if err != nil {
+		t.Errorf("Error returned from execute")
 	}
-}
 
-type MainCmd struct{}
+	v, ok := testCmd.vars["executed"].(bool)
+	if !ok {
+		t.Errorf("Error with bool")
+	}
 
-func (c MainCmd) Name() string                 { return "Main" }
-func (c MainCmd) Description() string          { return "MainDescription" }
-func (c MainCmd) DefineFlags(fs *flag.FlagSet) {}
-func (c MainCmd) Execute(args []string) error  { return nil }
-
-type SubCmd struct{}
-
-func (c SubCmd) Name() string                 { return "Sub" }
-func (c SubCmd) Description() string          { return "SubDescription" }
-func (c SubCmd) DefineFlags(fs *flag.FlagSet) {}
-func (c SubCmd) Execute(args []string) error {
-	return fmt.Errorf("SubCmd executed")
+	if v != true {
+		t.Errorf("Cmd did not execute")
+	}
 }
 
 func TestExecuteSubCommand(t *testing.T) {
-	app := NewApp(&MainCmd{})
-	app.AddSub("sub", &SubCmd{})
+
+	mainCmd := MockCmd{
+		name:        func() string { return "Main" },
+		description: func() string { return "MainDescription" },
+		defineFlags: func(fs *flag.FlagSet) {},
+		execute:     func(args []string) error { return nil },
+	}
+
+	subCmd := MockCmd{
+		name:        func() string { return "Sub" },
+		description: func() string { return "SubDescription" },
+		defineFlags: func(fs *flag.FlagSet) {},
+		execute:     func(args []string) error { return fmt.Errorf("SubCmd executed") },
+	}
+
+	app := NewApp(&mainCmd)
+	app.AddSub("sub", &subCmd)
 
 	err := app.Run([]string{"./test", "sub"})
 	if err == nil {
 		t.Errorf("Sub command not executed")
+	}
+}
+
+func TestRemoveDisallowedChars(t *testing.T) {
+	tests := []struct {
+		old  string
+		want string
+	}{
+		{"cmdwithop%+-=/", "cmdwithop"},
+		{" leadingtrailing ", "leadingtrailing"},
+		{"h@ck th3 pl@n3t", "h@ckth3pl@n3t"},
+		{"mess with the best, die like the rest", "messwiththebestdieliketherest"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.old, func(t *testing.T) {
+			got := removeDisallowedChars(tt.old, " \t\n\r+-=/*%,")
+			if got != tt.want {
+				t.Errorf("Got %s, want %s", got, tt.want)
+			}
+		})
 	}
 }
