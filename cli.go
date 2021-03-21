@@ -28,10 +28,20 @@ func NewNode(c Command) *Node {
 
 func (n *Node) AddSub(name string, c Command) *Node {
 	sc := NewNode(c)
-	// TODO: Sanitize string to remove spaces
+	name = removeDisallowedChars(name, " \t\n\r+-=/*%")
 	n.SubCommands[name] = sc
 
 	return sc
+}
+
+func removeDisallowedChars(name string, disallowed string) string {
+	replaceList := []string{}
+	for _, r := range disallowed {
+		replaceList = append(replaceList, string(r), "")
+	}
+	r := strings.NewReplacer(replaceList...)
+	name = r.Replace(name)
+	return name
 }
 
 type App struct {
